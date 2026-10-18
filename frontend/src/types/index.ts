@@ -121,6 +121,14 @@ export interface UncertaintyCaveats {
   recommended_verification_steps: string[];
 }
 
+export interface DiagnosticRecommendation {
+  recommended_action: string;
+  target_entity: string;
+  discriminating_value: string;
+  status: string;
+  evidence_basis: string[];
+}
+
 export interface IncidentInvestigationResponse {
   incident_id: string;
   title: string;
@@ -133,6 +141,7 @@ export interface IncidentInvestigationResponse {
   evidence_paths: EvidencePath[];
   active_alerts: CorroboratingAlert[];
   uncertainty: UncertaintyCaveats;
+  diagnostic_recommendation?: DiagnosticRecommendation;
   has_sufficient_evidence: boolean;
   cypher_query_provenance: string[];
 }

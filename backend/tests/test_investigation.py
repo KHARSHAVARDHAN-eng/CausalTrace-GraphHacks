@@ -191,3 +191,68 @@ def test_unavailable_database_handling():
 
     assert status.connected is False
     assert "FalkorDB unreachable" in status.message
+
+
+def test_diagnostic_recommendation_competing_hypotheses():
+    """Verify read-only diagnostic recommendation discriminating competing hypotheses in inc-08."""
+    inv = investigation_service.investigate("inc-08-dual-competing-deployments")
+
+    rec = inv.diagnostic_recommendation
+    assert rec is not None
+    assert rec.status == "RECOMMENDED (NOT EXECUTED)"
+    assert "dep-fraud-v2.1" in rec.target_entity
+    # Must be read-only (inspecting telemetry, not modifying traffic or deploying)
+    assert any(word in rec.recommended_action.lower() for word in ["inspect", "telemetry", "compare", "read-only"])
+    assert "shift traffic" not in rec.recommended_action.lower()
+    # Must explain discriminating value against competing candidate
+    assert "dep-tax-v1.9" in rec.discriminating_value
+    assert "dep-fraud-v2.1" in rec.discriminating_value
+    assert len(rec.evidence_basis) >= 1
+
+
+def test_diagnostic_recommendation_insufficient_evidence_abstention():
+    """Verify incident-grounded read-only recommendation when abstaining on inc-07."""
+    inv = investigation_service.investigate("inc-07-insufficient-evidence-abstain")
+
+    rec = inv.diagnostic_recommendation
+    assert rec is not None
+    assert rec.status == "RECOMMENDED (NOT EXECUTED)"
+    # Must be grounded in the affected billing service
+    assert any(term in rec.target_entity for term in ["Billing", "svc-billing-service"])
+    # Must recommend targeted read-only diagnostic audit
+    assert "read-only" in rec.recommended_action.lower() or "inspect" in rec.recommended_action.lower()
+    # Must not claim missing evidence proves guilt
+    assert "observability gap" in rec.discriminating_value.lower() or "not proof" in rec.discriminating_value.lower()
+    # Must reference the identified gaps
+    assert len(rec.evidence_basis) >= 1
+    assert any("gap" in b.lower() or "zero" in b.lower() or "threshold" in b.lower() for b in rec.evidence_basis)
+
+
+def test_diagnostic_recommendation_infrastructure_incident():
+    """Verify recommendation grounds on infrastructure alert for inc-06 without deployments."""
+    inv = investigation_service.investigate("inc-06-upstream-dns-misconfig")
+
+    rec = inv.diagnostic_recommendation
+    assert rec is not None
+    assert rec.status == "RECOMMENDED (NOT EXECUTED)"
+    assert any(term in rec.target_entity for term in ["CoreDNS", "alt-dns-core-failure"])
+    assert "inspect" in rec.recommended_action.lower() or "read-only" in rec.recommended_action.lower()
+
+
+def test_diagnostic_recommendation_abstention_specific_missing_signals():
+    """Verify abstention recommendation inspects specific missing signals without assuming telemetry outage."""
+    inv = investigation_service.investigate("inc-07-insufficient-evidence-abstain")
+    rec = inv.diagnostic_recommendation
+
+    assert rec is not None
+    assert rec.status == "RECOMMENDED (NOT EXECUTED)"
+    # Recommends checking specific missing signals identified for this incident (logs and change records)
+    action_lower = rec.recommended_action.lower()
+    assert "logs" in action_lower
+    assert "deployment" in action_lower or "change" in action_lower
+    assert "telemetry outage" not in action_lower
+    # Does not treat absence of evidence as proof
+    assert "not proof" in rec.discriminating_value.lower()
+    # Evidence basis strictly matches the incident's actual data
+    assert len(rec.evidence_basis) == 3
+    assert rec.evidence_basis == inv.uncertainty.insufficient_evidence_flags

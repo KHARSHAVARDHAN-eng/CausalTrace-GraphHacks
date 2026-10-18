@@ -89,6 +89,15 @@ class UncertaintyCaveats(BaseModel):
     )
 
 
+class DiagnosticRecommendation(BaseModel):
+    """Evidence-guided next diagnostic action recommended to the on-call engineer."""
+    recommended_action: str = Field(..., description="Concrete verification check or telemetry inspection")
+    target_entity: str = Field(..., description="Service, deployment, or metric target")
+    discriminating_value: str = Field(..., description="How this check differentiates between top hypothesis and competing candidates or gaps")
+    status: str = Field(default="RECOMMENDED (NOT EXECUTED)", description="Explicit status flag confirming recommendation is unexecuted")
+    evidence_basis: List[str] = Field(default_factory=list, description="Observed facts and evidence gaps motivating this recommendation")
+
+
 class IncidentInvestigationResponse(BaseModel):
     """Full investigation output payload returned by the API."""
     incident_id: str
@@ -105,6 +114,10 @@ class IncidentInvestigationResponse(BaseModel):
     evidence_paths: List[EvidencePath]
     active_alerts: List[CorroboratingAlert]
     uncertainty: UncertaintyCaveats
+    diagnostic_recommendation: Optional[DiagnosticRecommendation] = Field(
+        default=None,
+        description="Evidence-guided next diagnostic recommendation with explicit unexecuted status",
+    )
     has_sufficient_evidence: bool = Field(default=True, description="False if evidence is too sparse for high confidence")
     cypher_query_provenance: List[str] = Field(
         default_factory=list,

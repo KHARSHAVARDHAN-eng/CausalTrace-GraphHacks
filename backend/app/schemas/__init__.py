@@ -14,6 +14,7 @@ from app.schemas.investigation import (
     CorroboratingLog,
     RootCauseHypothesis,
     UncertaintyCaveats,
+    DiagnosticRecommendation,
     IncidentInvestigationResponse,
 )
 
@@ -33,5 +34,6 @@ __all__ = [
     "CorroboratingLog",
     "RootCauseHypothesis",
     "UncertaintyCaveats",
+    "DiagnosticRecommendation",
     "IncidentInvestigationResponse",
 ]

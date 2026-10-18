@@ -124,14 +124,22 @@ def run_evaluation() -> Dict[str, Any]:
     abstention_rate = (abstention_success / abstention_scenarios * 100) if abstention_scenarios else 0.0
     mean_latency = sum(latencies_ms) / len(latencies_ms) if latencies_ms else 0.0
 
+    cold_start_ms = latencies_ms[0] if latencies_ms else 0.0
+    warm_latencies = latencies_ms[1:] if len(latencies_ms) > 1 else latencies_ms
+    mean_warm_latency = sum(warm_latencies) / len(warm_latencies) if warm_latencies else 0.0
+    min_warm = min(warm_latencies) if warm_latencies else 0.0
+    max_warm = max(warm_latencies) if warm_latencies else 0.0
+
     print("\n" + "=" * 90)
-    print(" SUMMARY BENCHMARK METRICS")
+    print(" SUMMARY BENCHMARK METRICS (Synthetic Suite: 10 Curated Scenarios)")
     print("=" * 90)
     print(f"Top-1 Root-Cause Accuracy:           {top1_acc:6.1f}%  ({top_1_correct}/{culprit_scenarios} scenarios)")
     print(f"Top-3 Root-Cause Recall:             {top3_rec:6.1f}%  ({top_3_correct}/{culprit_scenarios} scenarios)")
     print(f"Misleading-Alert Demotion Rate:      {distractor_acc:6.1f}%  ({distractor_success}/{distractor_scenarios} distractor scenarios)")
     print(f"Insufficient Evidence Abstention:    {abstention_rate:6.1f}%  ({abstention_success}/{abstention_scenarios} ambiguous/gap scenarios)")
-    print(f"Mean Graph Traversal Latency:        {mean_latency:6.1f} ms")
+    print(f"Scenario 1 Measured Latency:         {cold_start_ms:6.1f} ms  (First scenario execution)")
+    print(f"Warm Traversal Latency (Scenarios 2-10): {mean_warm_latency:4.1f} ms mean ({min_warm:.1f}–{max_warm:.1f} ms range)")
+    print(f"Overall Mean Traversal Latency:      {mean_latency:6.1f} ms  (All 10 scenarios)")
     print("=" * 90 + "\n")
 
     return {
@@ -141,6 +149,10 @@ def run_evaluation() -> Dict[str, Any]:
         "misleading_alert_demotion_pct": distractor_acc,
         "abstention_rate_pct": abstention_rate,
         "mean_latency_ms": mean_latency,
+        "cold_start_latency_ms": cold_start_ms,
+        "mean_warm_latency_ms": mean_warm_latency,
+        "min_warm_latency_ms": min_warm,
+        "max_warm_latency_ms": max_warm,
         "results": results_table,
     }
 

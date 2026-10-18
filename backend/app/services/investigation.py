@@ -16,6 +16,7 @@ from app.schemas.investigation import (
     CorroboratingAlert,
     CorroboratingLog,
     UncertaintyCaveats,
+    DiagnosticRecommendation,
 )
 
 logger = logging.getLogger(__name__)
@@ -392,20 +393,36 @@ class IncidentInvestigationService:
             else:
                 justification = f"Rank #1 '{top_cand.entity_id}' on {top_cand.service_name} is the sole primary causal candidate (score {top_cand.score:.3f}), substantiated by {reasons_summary}."
 
+        diag_rec = self._synthesize_diagnostic_recommendation(
+            incident=incident,
+            has_sufficient=has_sufficient,
+            hypotheses=hypotheses,
+            evidence_flags=evidence_flags,
+            affected_services=affected_services,
+            candidate_list=candidate_list,
+            name_map=name_map,
+        )
+
+        rec_steps = [
+            diag_rec.recommended_action,
+            f"Diagnostic discrimination: {diag_rec.discriminating_value}",
+            f"Execution status: [{diag_rec.status}] — read-only diagnostic check requiring human engineer verification.",
+        ]
+
+        if not has_sufficient:
+            flags = evidence_flags
+        elif hypotheses and hypotheses[0].missing_evidence:
+            flags = hypotheses[0].missing_evidence
+        else:
+            flags = ["Live connection pool socket profiling unattached to graph."]
+
         uncertainty = UncertaintyCaveats(
             statement=(
                 "Rankings represent probabilistic topological and temporal alignment in FalkorDB. "
                 "CausalTrace explicitly does not claim definitive mathematical proof of causality from correlation alone."
             ),
-            insufficient_evidence_flags=evidence_flags or [
-                "Database connection pool saturation not yet verified via live database engine profiling.",
-                "Asynchronous retry queues and Kafka lag metrics not joined into current evidence graph.",
-            ],
-            recommended_verification_steps=[
-                "Inspect connection pool exhaustion metrics on PostgreSQL cluster.",
-                "Verify if canary rollback of highest-ranked deployment mitigates error rate on checkout-web.",
-                "Cross-check trace ID trc-checkout-881 in distributed APM tool.",
-            ],
+            insufficient_evidence_flags=flags,
+            recommended_verification_steps=rec_steps,
         )
 
         return IncidentInvestigationResponse(
@@ -420,9 +437,112 @@ class IncidentInvestigationService:
             evidence_paths=all_paths,
             active_alerts=alerts,
             uncertainty=uncertainty,
+            diagnostic_recommendation=diag_rec,
             has_sufficient_evidence=has_sufficient,
             cypher_query_provenance=list(dict.fromkeys(queries_executed)),
         )
+
+    def _synthesize_diagnostic_recommendation(
+        self,
+        incident: Dict[str, Any],
+        has_sufficient: bool,
+        hypotheses: List[RootCauseHypothesis],
+        evidence_flags: List[str],
+        affected_services: List[Dict[str, Any]],
+        candidate_list: List[str],
+        name_map: Dict[str, str],
+    ) -> DiagnosticRecommendation:
+        """Synthesize an evidence-guided, read-only diagnostic recommendation from observed facts and gaps.
+
+        Strictly avoids recommending operational changes (e.g., rolling back or shifting traffic) as diagnostic checks.
+        Produces concrete read-only inspection steps (metrics, logs, traces) that differentiate competing hypotheses.
+        """
+        if not has_sufficient or not hypotheses:
+            target = affected_services[0]["name"] if affected_services else "Affected Services"
+            gaps = evidence_flags or ["Insufficient evidence detected in blast radius"]
+
+            missing_signals = []
+            if any("log" in g.lower() for g in gaps):
+                missing_signals.append("local application logs and error streams")
+            if any("deployment" in g.lower() for g in gaps):
+                missing_signals.append("external change registries and manual deployment records")
+            if not missing_signals:
+                missing_signals.append("runtime metrics, socket states, and container health")
+
+            signals_desc = " and ".join(missing_signals)
+            action = (
+                f"Perform read-only diagnostic inspection: check {signals_desc} on {target} "
+                f"to verify whether unindexed anomalies or untracked changes occurred."
+            )
+            discriminating = (
+                f"Verifies the identified evidence gap on {target} ({', '.join(gaps[:2])}); "
+                f"evaluates whether uncaptured events explain the symptom; missing evidence is flagged as an unverified gap, not proof of any hypothesis."
+            )
+            return DiagnosticRecommendation(
+                recommended_action=action,
+                target_entity=target,
+                discriminating_value=discriminating,
+                status="RECOMMENDED (NOT EXECUTED)",
+                evidence_basis=gaps,
+            )
+
+        top = hypotheses[0]
+        if len(hypotheses) > 1:
+            competing = hypotheses[1]
+            if top.entity_type == "Deployment":
+                action = (
+                    f"Execute read-only telemetry comparison: inspect p99 RPC latency, error-rate timeseries, "
+                    f"and runtime exception logs for release '{top.entity_id}' on {top.service_name} "
+                    f"against canary baseline before the release."
+                )
+            else:
+                action = (
+                    f"Execute read-only metric inspection: check threshold breach timeseries and saturation metrics "
+                    f"for alert '{top.entity_id}' on {top.service_name}."
+                )
+
+            competing_branch = "non-critical/async path" if competing.is_distractor_or_competing else "lower temporal alignment"
+            discriminating = (
+                f"Distinguishes primary candidate '{top.entity_id}' on {top.service_name} ({top.relative_confidence_pct}% confidence) "
+                f"from competing candidate '{competing.entity_id}' on {competing.service_name} "
+                f"({competing.relative_confidence_pct}% confidence, {competing_branch}) "
+                f"by verifying whether error traces correlate with the synchronous critical call chain."
+            )
+            evidence_basis = top.supporting_evidence[:2] + (top.missing_evidence[:1] if top.missing_evidence else [])
+            return DiagnosticRecommendation(
+                recommended_action=action,
+                target_entity=f"{top.service_name} ({top.entity_id})",
+                discriminating_value=discriminating,
+                status="RECOMMENDED (NOT EXECUTED)",
+                evidence_basis=evidence_basis,
+            )
+        else:
+            if top.entity_type == "Deployment":
+                action = (
+                    f"Execute read-only telemetry trace: inspect active runtime spans and error log streams "
+                    f"on {top.service_name} specifically for '{top.entity_id}'."
+                )
+                discriminating = (
+                    f"Confirms whether '{top.entity_id}' on {top.service_name} is the sole active failure origin "
+                    f"across the traversed blast radius without competing releases."
+                )
+            else:
+                action = (
+                    f"Inspect read-only infrastructure health: check cluster daemon metrics, connection pool socket stats, "
+                    f"and packet loss telemetry for {top.service_name}."
+                )
+                discriminating = (
+                    f"Differentiates localized resource starvation or network partition on {top.service_name} "
+                    f"from software defects on upstream callers."
+                )
+            evidence_basis = top.supporting_evidence[:2] + (top.missing_evidence[:1] if top.missing_evidence else [])
+            return DiagnosticRecommendation(
+                recommended_action=action,
+                target_entity=f"{top.service_name} ({top.entity_id})",
+                discriminating_value=discriminating,
+                status="RECOMMENDED (NOT EXECUTED)",
+                evidence_basis=evidence_basis,
+            )
 
 
 investigation_service = IncidentInvestigationService()

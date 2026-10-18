@@ -666,6 +666,45 @@ export const InvestigationWorkbench: React.FC = () => {
 
             {/* Right Column: Epistemic Uncertainty & Cypher Audit Trail */}
             <div className="space-y-4">
+              {/* Evidence-Guided Next Diagnostic Recommendation */}
+              {investigation.diagnostic_recommendation && (
+                <div className="glass-card rounded-2xl p-4 border border-teal-500/40 bg-teal-950/20 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2 text-teal-300 font-semibold text-xs">
+                      <Zap className="w-4 h-4 text-teal-400 shrink-0" />
+                      <span>Evidence-Guided Next Diagnostic Check</span>
+                    </div>
+                    <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-amber-500/20 text-amber-300 border border-amber-500/30 font-semibold tracking-wide">
+                      {investigation.diagnostic_recommendation.status}
+                    </span>
+                  </div>
+
+                  <div className="p-2.5 rounded-lg bg-zinc-950/80 border border-teal-900/50 space-y-1.5">
+                    <div className="text-[10px] font-mono text-zinc-400 uppercase tracking-wider">Recommended Action:</div>
+                    <p className="text-xs text-white font-medium leading-relaxed">
+                      {investigation.diagnostic_recommendation.recommended_action}
+                    </p>
+                    <div className="text-[11px] text-teal-200/90 pt-1">
+                      <span className="font-semibold text-teal-400 font-mono text-[10px] uppercase">Discriminating Value: </span>
+                      {investigation.diagnostic_recommendation.discriminating_value}
+                    </div>
+                  </div>
+
+                  {investigation.diagnostic_recommendation.evidence_basis.length > 0 && (
+                    <div className="space-y-1 pt-1">
+                      <span className="text-[10px] font-mono uppercase text-zinc-400 tracking-wider">
+                        Motivating Evidence & Gaps:
+                      </span>
+                      <ul className="list-disc list-inside text-[11px] text-zinc-400 space-y-0.5">
+                        {investigation.diagnostic_recommendation.evidence_basis.map((item, idx) => (
+                          <li key={idx} className="leading-tight">{item}</li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                </div>
+              )}
+
               {/* Epistemic Uncertainty & Causality Limits */}
               <div className="glass-card rounded-2xl p-4 border border-amber-500/30 bg-amber-950/10 space-y-3">
                 <div className="flex items-center gap-2 text-amber-400 font-semibold text-xs">

@@ -3,10 +3,15 @@
 > **AI-Powered Incident Investigation Platform connecting service dependencies, deployments, alerts, and logs in FalkorDB.**  
 > Built for the **Graph Hacks** Hackathon (**Track:** Agents That Act on Connected Data).
 
-[![Backend Tests](https://img.shields.io/badge/pytest-25%20passed-emerald)](backend/tests/)
-[![Benchmark](https://img.shields.io/badge/Benchmark-10%2F10%20Verified-teal)](backend/scripts/evaluate_investigation.py)
+[![Backend Tests](https://img.shields.io/badge/pytest-29%20passed-emerald)](backend/tests/)
+[![Benchmark](https://img.shields.io/badge/Benchmark-10%20Synthetic%20Scenarios%20Pass-teal)](backend/scripts/evaluate_investigation.py)
 [![Graph Engine](https://img.shields.io/badge/FalkorDB-Native%20Cypher-blue)](https://falkordb.com)
 [![Frontend](https://img.shields.io/badge/Vite-React%2018%20%2B%20Tailwind-purple)](frontend/)
+[![Hackathon Submission Package](https://img.shields.io/badge/Submission-SUBMISSION.md-orange)](SUBMISSION.md)
+[![Judge Demo Script](https://img.shields.io/badge/Demo%20Script-DEMO__SCRIPT.md-indigo)](DEMO_SCRIPT.md)
+
+> 🎥 **Demo Video:** *[Pending Recording — follow the 2–3 minute narration in DEMO_SCRIPT.md]*
+
 
 ---
 
@@ -19,9 +24,9 @@ During high-severity production incidents, Site Reliability Engineers (SREs) and
 - Structured error logs and distributed traces across services
 - Historical post-mortems and remediation runbooks
 
-In microservice architectures, an upstream root cause (e.g., a connection pool misconfiguration 2–4 hops away) frequently produces symptom alerts on edge services (e.g., checkout API 500s). Relational databases require expensive recursive multi-table JOINs to discover such paths, while distributed tracing alone lacks deployment context.
+In microservice architectures, an upstream root cause (e.g., a connection pool misconfiguration 2–4 hops away) frequently produces symptom alerts on edge services (e.g., checkout API 500s). Traversing multi-hop dependency call chains in tabular relational schemas typically requires complex recursive Common Table Expressions (CTEs) or repeated self-joins, whereas distributed tracing alone often lacks deployment release context.
 
-**CausalTrace** models the entire software production ecosystem as a property graph in **FalkorDB**. When an incident occurs, CausalTrace traverses service topology and temporal change events using native **Cypher queries**, combines graph analytics with a **modular LLM provider**, and ranks root-cause hypotheses with traceable evidence chains in single-digit milliseconds.
+**CausalTrace** models the entire software production ecosystem as a property graph in **FalkorDB**. When an incident occurs, CausalTrace traverses service topology and temporal change events using native **Cypher queries**, computes evidence-corroborated root-cause rankings with deterministic graph analytics, and isolates findings with warm graph traversal latencies of 3.6–5.3 ms (mean warm latency: 4.5 ms; overall benchmark mean: 10.4 ms across all 10 evaluation scenarios including the first scenario's 63.3 ms measured latency) while maintaining an extensible **modular LLM provider interface** for environment health probes.
 
 ---
 
@@ -42,27 +47,29 @@ In microservice architectures, an upstream root cause (e.g., a connection pool m
                       │  - Native FalkorDB Cypher Traversal Engine   │
                       │  - Multi-Hop Blast Radius Detection           │
                       │  - Causal Hypothesis Scoring & Demotion       │
-                      │  - Safe Abstention Engine (Zero Hallucination)│
+                      │  - Safe Abstention Engine (Evidence-Bounded)  │
+                      │  - Evidence-Guided Diagnostic Recommendations │
                       │  - Health Probes & Pydantic v2 Domain Schemas │
                       └───────────────┬───────────────┬───────────────┘
                                       │               │
                       Cypher (Redis)  │               │ Provider API
                                       ▼               ▼
                       ┌──────────────────────┐ ┌──────────────────────┐
-                      │   FalkorDB Graph     │ │ Modular LLM Provider │
-                      │ (Primary Graph Store)│ │  (OpenAI / Anthropic)│
-                      │ Service Topologies,  │ │ Narrative Synthesis &│
-                      │ Deployments, Alerts, │ │ Incident Commander   │
-                      │ Logs & Traces        │ │ Runbook Insights     │
+                      │   FalkorDB Graph     │ │ Modular AI Provider  │
+                      │ (Primary Graph Store)│ │ (OpenAI/Claude/Stub) │
+                      │ Service Topologies,  │ │ Health Readiness &   │
+                      │ Deployments, Alerts, │ │ Extensible Interface │
+                      │ Logs & Traces        │ │ (Not in Scoring Path)│
                       └──────────────────────┘ └──────────────────────┘
 ```
 
 ### Key Architectural Principles
 1. **FalkorDB as the Ground-Truth Graph**: All service relationships, deployments, alerts, and evidence paths live in FalkorDB. The system avoids relational simulations or mocked graph states.
-2. **Deterministic Evidence-Based Scoring**: Root cause rankings are computed from structural topological alignment, temporal proximity, critical path flags, and distributed trace corroboration.
+2. **Deterministic Graph Scoring (No Generative Candidate Creation)**: The current incident investigation and ranking pipeline does not call a generative LLM to produce or rank root-cause candidates. All candidate hypotheses, evidence paths, and scores are derived deterministically from FalkorDB Cypher queries and structured telemetry heuristics, avoiding generative fabrication of non-existent services or releases.
 3. **Safe Abstention Under Telemetry Gaps**: If telemetry is missing or confidence is low (< 0.60), the engine explicitly abstains and flags data gaps rather than fabricating plausible-sounding culprits.
-4. **Honest Readiness Reporting**: `/api/health` reports true socket connectivity, ping latencies, and LLM configuration without masking failures.
-5. **Strict Ground-Truth Isolation**: The benchmark ground truth is strictly isolated in `backend/app/evaluation/` and is never imported or queried by the investigation engine.
+4. **Evidence-Guided Next Diagnostic Recommendations**: Recommends concrete unexecuted verification checks derived from observed evidence and gaps, explaining their discriminating value against competing hypotheses.
+5. **Honest Readiness Reporting**: `/api/health` reports true socket connectivity, ping latencies, and LLM configuration without masking failures.
+6. **Strict Ground-Truth Isolation**: The benchmark ground truth is strictly isolated in `backend/app/evaluation/` and is never imported or queried by the investigation engine.
 
 ---
 
@@ -167,30 +174,35 @@ Total Scenarios Evaluated: 10
 
 #   | Incident ID                                | Expected               | Top-1 Found            | Score  | Status           | Latency 
 -----------------------------------------------------------------------------------------------------------------------------------------
-1   | inc-01-payment-pool-exhaustion             | dep-payment-v2.4.1     | dep-payment-v2.4.1     | 0.955  | PASS (Top-1)     | 64.2  ms
-2   | inc-02-auth-jwt-secret-mismatch            | dep-auth-v1.12.0       | dep-auth-v1.12.0       | 1.000  | PASS (Top-1)     | 5.1   ms
-3   | inc-03-inventory-deadlock-cascade          | dep-inv-v3.2.0         | dep-inv-v3.2.0         | 1.000  | PASS (Top-1)     | 3.9   ms
-4   | inc-04-search-vector-oom                   | dep-search-v5.0.0      | dep-search-v5.0.0      | 1.000  | PASS (Top-1)     | 4.0   ms
-5   | inc-05-notification-rate-limit-cascade     | dep-notif-v1.4.2       | dep-notif-v1.4.2       | 1.000  | PASS (Top-1)     | 3.8   ms
-6   | inc-06-upstream-dns-misconfig              | alt-dns-core-failure   | alt-dns-core-failure   | 0.812  | PASS (Top-1)     | 3.5   ms
-7   | inc-07-insufficient-evidence-abstain       | ABSTAIN                | NONE                   | 0.000  | PASS (Abstained) | 3.4   ms
-8   | inc-08-dual-competing-deployments          | dep-fraud-v2.1         | dep-fraud-v2.1         | 1.000  | PASS (Top-1)     | 4.1   ms
-9   | inc-09-deep-chain-database-schema-migration | dep-ledger-v1.0.4      | dep-ledger-v1.0.4      | 0.915  | PASS (Top-1)     | 4.5   ms
+1   | inc-01-payment-pool-exhaustion             | dep-payment-v2.4.1     | dep-payment-v2.4.1     | 0.955  | PASS (Top-1)     | 63.3  ms
+2   | inc-02-auth-jwt-secret-mismatch            | dep-auth-v1.12.0       | dep-auth-v1.12.0       | 1.000  | PASS (Top-1)     | 5.3   ms
+3   | inc-03-inventory-deadlock-cascade          | dep-inv-v3.2.0         | dep-inv-v3.2.0         | 1.000  | PASS (Top-1)     | 4.6   ms
+4   | inc-04-search-vector-oom                   | dep-search-v5.0.0      | dep-search-v5.0.0      | 1.000  | PASS (Top-1)     | 4.9   ms
+5   | inc-05-notification-rate-limit-cascade     | dep-notif-v1.4.2       | dep-notif-v1.4.2       | 1.000  | PASS (Top-1)     | 5.1   ms
+6   | inc-06-upstream-dns-misconfig              | alt-dns-core-failure   | alt-dns-core-failure   | 0.812  | PASS (Top-1)     | 3.8   ms
+7   | inc-07-insufficient-evidence-abstain       | ABSTAIN                | NONE                   | 0.000  | PASS (Abstained) | 3.6   ms
+8   | inc-08-dual-competing-deployments          | dep-fraud-v2.1         | dep-fraud-v2.1         | 1.000  | PASS (Top-1)     | 4.6   ms
+9   | inc-09-deep-chain-database-schema-migration | dep-ledger-v1.0.4      | dep-ledger-v1.0.4      | 0.915  | PASS (Top-1)     | 4.3   ms
 10  | inc-10-external-cloud-dependency-degradation | alt-s3-slowdown        | alt-s3-slowdown        | 0.812  | PASS (Top-1)     | 4.3   ms
 
 ==========================================================================================
- SUMMARY BENCHMARK METRICS
+ SUMMARY BENCHMARK METRICS (Synthetic Suite: 10 Curated Scenarios)
 ==========================================================================================
-Top-1 Root-Cause Accuracy:            100.0%  (9/9 culprit scenarios)
-Top-3 Root-Cause Recall:              100.0%  (9/9 culprit scenarios)
+Top-1 Root-Cause Accuracy:            100.0%  (9/9 scenarios)
+Top-3 Root-Cause Recall:              100.0%  (9/9 scenarios)
 Misleading-Alert Demotion Rate:       100.0%  (8/8 distractor scenarios)
 Insufficient Evidence Abstention:     100.0%  (1/1 ambiguous/gap scenarios)
-Mean Graph Traversal Latency:          10.1 ms (10/10 scenarios)
+Scenario 1 Measured Latency:           63.3 ms  (First scenario execution)
+Warm Traversal Latency (Scenarios 2-10):  4.5 ms mean (3.6–5.3 ms range)
+Overall Mean Traversal Latency:        10.4 ms  (All 10 scenarios)
 ==========================================================================================
 ```
 
+> [!NOTE]
+> **Latency Breakdown**: Scenario 1 measured 63.3 ms on its first execution. Warm graph traversal latency across Scenarios 2–10 ranges between 3.6 ms and 5.3 ms (averaging 4.5 ms). The overall benchmark mean latency across all 10 scenarios is 10.4 ms.
+
 > [!IMPORTANT]
-> **Synthetic Evaluation Disclosure**: This benchmark evaluates deterministic graph ranking across 10 curated synthetic topologies. Relative confidence scores (`relative_confidence_pct`) represent softmax-normalized heuristic evidence alignment across candidate entities. They do **not** represent real-world statistical probabilities or mathematical proof of causality.
+> **Synthetic Evaluation Disclosure**: This benchmark evaluates deterministic graph ranking across 10 curated synthetic topologies, including one deliberate telemetry gap scenario where the engine is expected to abstain. It does not imply that 10 confirmed real-world production outages were investigated. Relative confidence scores (`relative_confidence_pct`) represent softmax-normalized heuristic evidence alignment across candidate entities; they do **not** represent real-world statistical probabilities or mathematical proof of causality.
 
 ---
 
@@ -277,7 +289,7 @@ npm run dev
 
 ### Step 5: Run Verification Suites
 
-1. **Run Backend Unit & Integration Tests (25 tests)**:
+1. **Run Backend Unit & Integration Tests (29 tests)**:
 ```bash
 cd backend
 .venv/bin/pytest -v
@@ -317,15 +329,14 @@ Follow this script for a structured evaluation demo:
 ### Part 3: Safe Abstention Under Telemetry Gaps (`inc-07-insufficient-evidence-abstain`) — [45s]
 1. Click the **"Hard Edge Cases"** filter and select `inc-07-insufficient-evidence-abstain`.
 2. **Observe**: The workbench renders an amber **"INSUFFICIENT EVIDENCE DETECTED — ABSTENTION MODE"** banner.
-3. **Zero Hallucination**: Rather than guessing, CausalTrace produces 0 root-cause hypotheses and lists specific evidence gap flags:
-   - *Highest candidate score is below confidence threshold (< 0.60).*
-   - *Telemetry gap: Zero error or fatal logs recorded across the blast radius.*
-   - *Zero code deployment events detected within the investigation window.*
-4. **Actionable SRE Guidance**: SRE verification steps are displayed to guide engineers toward restoring APM collectors.
+3. **Safe Abstention & Diagnostic Recommendation**: When telemetry is missing or confidence is below threshold (< 0.60), the investigation engine outputs 0 candidate hypotheses rather than guessing. It explicitly surfaces:
+   - Specific evidence gap flags (missing logs, zero candidate deployments).
+   - An **Evidence-Guided Next Diagnostic Check** (clearly labelled as `RECOMMENDED (NOT EXECUTED)`) instructing engineers to verify local application logs and change records on the affected service before taking mitigation actions.
+4. **Actionable SRE Guidance**: Recommended verification steps guide on-call responders without making unwarranted causal assertions.
 
 ### Part 4: Why FalkorDB Graph Traversal is Essential — [30s]
-- Explain that microservice topologies form directed acyclic and cyclic graphs. Relational databases require multiple recursive JOINs that explode exponentially as hop depth increases.
-- FalkorDB executes multi-hop variable-length path traversal (`[:DEPENDS_ON*1..4]`) in **sub-10 milliseconds**, enabling real-time incident triage during mission-critical outages.
+- Explain that microservice topologies form directed acyclic and cyclic graphs. In tabular relational schemas, querying variable-depth dependency graphs typically requires recursive CTEs or repeated self-joins that grow in complexity with hop depth.
+- FalkorDB executes multi-hop variable-length path traversal (`[:DEPENDS_ON*1..4]`) with warm graph traversals running in **3.6–5.3 ms** (mean warm traversal latency: **4.5 ms**; overall benchmark mean: **10.4 ms** across all 10 scenarios including the first scenario's 63.3 ms measured latency), enabling real-time incident triage during mission-critical outages.
 
 ---
 
@@ -333,7 +344,7 @@ Follow this script for a structured evaluation demo:
 
 In accordance with hackathon guidelines:
 - **Development Assistance**: AI pair programming tools (LLM assistants) were used to accelerate boilerplate scaffolding, TypeScript typing, and test authoring.
-- **Runtime AI Architecture**: CausalTrace features a modular AI provider interface (`backend/app/ai/provider.py`). Graph traversal, blast radius isolation, evidence corroboration, and candidate ranking are executed **deterministically in FalkorDB Cypher**. The optional LLM provider is utilized solely to synthesize natural-language incident executive summaries and remediation suggestions from the verified graph evidence. The system remains fully functional and reliable in offline/stub mode without any active LLM API keys.
+- **Runtime AI Architecture**: The current incident investigation and ranking pipeline does not call a generative LLM to produce or rank root-cause candidates. All graph traversals, blast radius isolation, evidence corroboration, candidate scoring, and abstention are executed deterministically via FalkorDB Cypher and graph heuristics. The repository includes an extensible modular LLM provider interface (`backend/app/ai/provider.py` with OpenAI, Anthropic, and Stub adapters) which currently powers backend health & readiness verification. Because generative LLMs are not in the critical scoring path, the system avoids generative fabrication of candidate entities and operates reliably in offline/stub mode without external API dependencies.
 
 ---
 
